@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      POSTGRES_DB: atlas
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 5s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  api:
+    build: .
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/atlas
+      DB_USER: atlas
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:?set external OIDC issuer URI}
+    depends_on:
+      db: {condition: service_healthy}
+      kafka: {condition: service_started}
+    ports: ["8082:8082"]
+volumes:
+  pgdata:
